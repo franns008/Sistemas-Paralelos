@@ -9,18 +9,15 @@
 #define MASTER 0
 
 void calcularMatrizTranspuesta(double *B, double *Btrans, int n, int stripSize, int rank) {
-    #pragma omp for schedule(static)
-    {
-        int indexRank = rank * stripSize;
-        int indexI;
-        for (int i = 0; i < n; i++) {
-            indexI = i * n;
-            for (int j = 0; j < stripSize; j++) {
-                Btrans[j * n + i] = B[indexI + (indexRank + j)];
-            }
+    int indexRank = rank * stripSize;
+    int indexI;
+    #pragma omp for schedule(static) private(indexI, indexRank)
+    for (int i = 0; i < n; i++) {
+        indexI = i * n;
+        for (int j = 0; j < stripSize; j++) {
+            Btrans[j * n + i] = B[indexI + (indexRank + j)];
         }
     }
-    
 }
 
 void sumaMatrices(double *A, double *B, double *C, int n, int stripSize){
@@ -86,11 +83,29 @@ int main(int argc, char *argv[]){
     MPI_Comm_size(MPI_COMM_WORLD, &numProcs);
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     // ====================================VALIDACIONES===================================
-    if(argc != 3){
-        if(rank == MASTER) printf("Uso: %s <N> <numero de threads>\n", argv[0]);
-        MPI_Finalize();
-        return 1;
-    }
+    if(rank == MASTER){
+        if(argc != 3){
+            printf("Uso: %s <N> <numero de threads>\n", argv[0]);
+            MPI_Finalize();
+            return 1;
+        }
+        n = atoi(argv[1]);
+        if (n <= 0){
+            printf("El valor de N debe ser mayor a 0. Se ingresó =>%i<=\n", n);
+            MPI_Finalize();
+            return 1;    
+        }
+        int numThreads = atoi(argv[2]);
+        if (numThreads <= 0){
+            printf("El valor de numThreads debe ser mayor a 0. Se ingresó =>%i<=\n", numThreads);
+            MPI_Finalize();
+            return 1;    
+        }
+        int stripSize = n / numProcs;
+        if (stripSize < blockSize){
+            printf("Cambiaremos el blocksize al valor %i para una ejecución balanceada \n", stripSize);
+            blockSize = stripSize;
+        }
 
     n = atoi(argv[1]);
     if (n <= 0){
@@ -110,10 +125,11 @@ int main(int argc, char *argv[]){
         blockSize = stripSize;
     }
 
-    if (n % blockSize != 0) {
-        printf("El tamaño de la matriz (n x n) debe ser divisible por el tamaño del bloque\n");
-        MPI_Finalize();
-        return 2;
+        if (n % blockSize != 0) {
+            printf("El tamaño de la matriz (n x n) debe ser divisible por el tamaño del bloque\n");
+            MPI_Finalize();
+            return 2;
+        }
     }
     // ====================================VALIDACIONES===================================
     int size = n * n;
@@ -227,7 +243,7 @@ int main(int argc, char *argv[]){
                 break;
             }
         }
-        printf("El resultado es correcto\n");
+        printf("El resultado es correcto, con N= %i y numero de procesos = %i \n",n, numProcs);
     }
 
     free(A); free(B); free(C); free(BtransLoc); free(BtransTot); free(res1); free(res2); free(R);
