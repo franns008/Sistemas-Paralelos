@@ -107,7 +107,7 @@ int main(int argc, char *argv[]){
         blockSize = stripSize;
     }
 
-    if (n % blocksize != 0) {
+    if (n % blockSize != 0) {
         printf("El tamaño de la matriz (n x n) debe ser divisible por el tamaño del bloque\n");
         MPI_Finalize();
         return 2;
