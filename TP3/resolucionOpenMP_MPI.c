@@ -102,9 +102,9 @@ int main(int argc, char *argv[]){
         return 1;    
     }
     int stripSize = n / numProcs;
-    if (stripSize < blocksize){
+    if (stripSize < blockSize){
         printf("Cambiaremos el blocksize al valor %i para una ejecución balanceada", stripSize);
-        blocksize = stripSize;
+        blockSize = stripSize;
     }
 
     if (n % blocksize != 0) {
