@@ -99,6 +99,11 @@ int main(int argc, char *argv[]){
 
     int stripSize = n / numProcs;
 
+    if (stripSize < blockSize){
+        blockSize = stripSize;
+        printf("Se cambia el tamaño del bloque a %d para un mejor aprovechamiento de los procesos\n", blockSize);
+    }
+
     if (rank == MASTER) {
         A = (double *)malloc(sizeof(double) * n * n);
         B = (double *)malloc(sizeof(double) * n * n);
