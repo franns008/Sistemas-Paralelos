@@ -101,11 +101,7 @@ int main(int argc, char *argv[]){
             MPI_Finalize();
             return 1;    
         }
-        int stripSize = n / numProcs;
-        if (stripSize / numThreads < blockSize){
-            printf("Cambiaremos el blocksize al valor %i para una ejecución balanceada \n", stripSize);
-            blockSize = stripSize;
-        }
+   
 
         if (n % blockSize != 0) {
             printf("El tamaño de la matriz (n x n) debe ser divisible por el tamaño del bloque\n");
@@ -113,7 +109,15 @@ int main(int argc, char *argv[]){
             return 2;
         }
     }
-    // ====================================VALIDACIONES===================================
+    int stripSize = n / numProcs;
+    if (stripSize / numThreads < blockSize){
+        if (rank == MASTER){
+            printf("Cambiaremos el blocksize al valor %i para una ejecución balanceada \n", stripSize);
+        }
+
+        blockSize = stripSize;
+    }
+    // ====================================FIN-VALIDACIONES===================================
     int size = n * n;
     int bufferSizeStrip = n * stripSize;
     if (rank == MASTER) {
