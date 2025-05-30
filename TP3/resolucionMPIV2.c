@@ -96,7 +96,7 @@ int main(int argc, char *argv[]){
     MPI_Comm_size(MPI_COMM_WORLD, &numProcs);
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     if (rank == MASTER) {
-        printf("Numero de procesos: %d y tamaño de la matriz\n", numProcs, n);
+        printf("Numero de procesos: %d y tamaño de la matriz %i \n", numProcs, n);
     }
     int stripSize = n / numProcs;
 
