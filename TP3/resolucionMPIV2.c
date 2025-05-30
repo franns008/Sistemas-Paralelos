@@ -92,15 +92,19 @@ int main(int argc, char *argv[]){
         printf("\nUsar: %s size \n  size: Dimension de la matriz y el vector\n", argv[0]);
         exit(1);
     }
-
+    
     MPI_Comm_size(MPI_COMM_WORLD, &numProcs);
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-
+    if (rank == MASTER) {
+        printf("Numero de procesos: %d y tamaño de la matriz\n", numProcs, n);
+    }
     int stripSize = n / numProcs;
 
     if (stripSize < blockSize){
         blockSize = stripSize;
-        printf("Se cambia el tamaño del bloque a %d para un mejor aprovechamiento de los procesos\n", blockSize);
+        if (rank == MASTER){
+            printf("Se cambia el tamaño del bloque a %d para un mejor aprovechamiento de los procesos\n", blockSize);
+        }
     }
 
     if (rank == MASTER) {
