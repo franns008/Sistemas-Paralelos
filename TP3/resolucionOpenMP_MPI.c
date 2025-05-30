@@ -107,24 +107,6 @@ int main(int argc, char *argv[]){
             blockSize = stripSize;
         }
 
-    n = atoi(argv[1]);
-    if (n <= 0){
-        printf("El valor de N debe ser mayor a 0. Se ingresó =>%i<=\n", n);
-        MPI_Finalize();
-        return 1;    
-    }
-    int numThreads = atoi(argv[2]);
-    if (numThreads <= 0){
-        printf("El valor de numThreads debe ser mayor a 0. Se ingresó =>%i<=\n", numThreads);
-        MPI_Finalize();
-        return 1;    
-    }
-    int stripSize = n / numProcs;
-    if (stripSize / numThreads < blockSize){
-        printf("Cambiaremos el blocksize al valor %i para una ejecución balanceada", stripSize);
-        blockSize = stripSize;
-    }
-
         if (n % blockSize != 0) {
             printf("El tamaño de la matriz (n x n) debe ser divisible por el tamaño del bloque\n");
             MPI_Finalize();
