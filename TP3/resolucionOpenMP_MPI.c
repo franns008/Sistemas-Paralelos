@@ -10,14 +10,17 @@
 
 void calcularMatrizTranspuesta(double *B, double *Btrans, int n, int stripSize, int rank) {
     #pragma omp for schedule(static)
-    int indexRank = rank * stripSize;
-    int indexI;
-    for (int i = 0; i < n; i++) {
-        indexI = i * n;
-        for (int j = 0; j < stripSize; j++) {
-            Btrans[j * n + i] = B[indexI + (indexRank + j)];
+    {
+        int indexRank = rank * stripSize;
+        int indexI;
+        for (int i = 0; i < n; i++) {
+            indexI = i * n;
+            for (int j = 0; j < stripSize; j++) {
+                Btrans[j * n + i] = B[indexI + (indexRank + j)];
+            }
         }
     }
+    
 }
 
 void sumaMatrices(double *A, double *B, double *C, int n, int stripSize){
