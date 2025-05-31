@@ -85,7 +85,7 @@ int main(int argc, char *argv[]){
     double localMaxA, localMinA, localSumaA;
     double localMaxB, localMinB, localSumaB;
     MPI_Status status;
-    double timetick, totalTime;
+    double timetick, totalTime, zonaReduceTimer, zonaMultiplicacionTimer, zonaBarreraTimer;
     int blockSize = 128;
 
     if ((argc != 2) || ((n = atoi(argv[1])) <= 0)) {
@@ -138,13 +138,17 @@ int main(int argc, char *argv[]){
                 B[i * n + j] = 1;
             }
         }
+        zonaBarreraTimer = dwalltime();
     }
+    // ===================== PRIMERA ZONA =============================
 
     MPI_Scatter(A, n * stripSize, MPI_DOUBLE, A, n * stripSize, MPI_DOUBLE, MASTER, MPI_COMM_WORLD);
     MPI_Scatter(C, n * stripSize, MPI_DOUBLE, C, n * stripSize, MPI_DOUBLE, MASTER, MPI_COMM_WORLD);
     MPI_Bcast(B, n * n, MPI_DOUBLE, MASTER, MPI_COMM_WORLD);
 
     MPI_Barrier(MPI_COMM_WORLD);
+    zonaBarreraTimer = dwalltime() - zonaBarreraTimer;
+     // ===================== FIN PRIMERA ZONA =============================
     if (rank == MASTER) {
         timetick = dwalltime();
     }
@@ -155,19 +159,33 @@ int main(int argc, char *argv[]){
 
     calcularMaximoMinimoPromedio(A, n, stripSize, &localMaxA, &localMinA, &localSumaA);
     calcularMaximoMinimoPromedio(B, n, stripSize, &localMaxB, &localMinB, &localSumaB);
+     // ===================== SEGUNDA ZONA =============================
+    if (rank == MASTER){
+        zonaMultiplicacionTimer = dwalltime();
+    }
     multiplacionMatricesBloque(A, B, res1, blockSize, n, stripSize);
     multiplacionMatricesBloque(C, BtransTot, res2, blockSize, n, stripSize);
-
+    
+    
+    if (rank == MASTER){
+        zonaMultiplicacionTimer = dwalltime() - zonaMultiplicacionTimer;
+    // ===================== FIN SEGUNDA ZONA =============================
+    
+        zonaReduceTimer = dwalltime();
+    }
+     // ===================== TERCERA ZONA =============================
     MPI_Reduce(&localMaxA, &maxA, 1, MPI_DOUBLE, MPI_MAX, MASTER, MPI_COMM_WORLD);
     MPI_Reduce(&localMinA, &minA, 1, MPI_DOUBLE, MPI_MIN, MASTER, MPI_COMM_WORLD);
     MPI_Reduce(&localSumaA, &sumaA, 1, MPI_DOUBLE, MPI_SUM, MASTER, MPI_COMM_WORLD);
     MPI_Reduce(&localMaxB, &maxB, 1, MPI_DOUBLE, MPI_MAX, MASTER, MPI_COMM_WORLD);
     MPI_Reduce(&localMinB, &minB, 1, MPI_DOUBLE, MPI_MIN, MASTER, MPI_COMM_WORLD);
     MPI_Reduce(&localSumaB, &sumaB, 1, MPI_DOUBLE, MPI_SUM, MASTER, MPI_COMM_WORLD);
-
+    
     double promedioA, promedioB, escalar;
 
     if (rank == MASTER) {
+        zonaReduceTimer = dwalltime() - zonaReduceTimer;
+    // ===================== FIN TERCERA ZONA =============================
         promedioA = sumaA / (n * n);
         promedioB = sumaB / (n * n);
         escalar = ((maxA * maxB) - (minA * minB)) / (promedioA * promedioB);
@@ -182,6 +200,9 @@ int main(int argc, char *argv[]){
     if (rank == MASTER) {
         totalTime = dwalltime() - timetick;
         printf("El tiempo total es: %f\n", totalTime);
+        printf("El tiempo de la zona de la barrera fue de %f\n",zonaBarreraTimer);
+        printf("El tiempo de la zona de multiplicaciones de matrices fue %f\n", zonaMultiplicacionTimer);
+        printf("El tiempo de la zona de las reducciones fue de %f\n", zonaReduceTimer);
 
         for (int i = 0; i < n * n; i++) {
             if (R[i] != n) {
