@@ -170,16 +170,22 @@ int main(int argc, char *argv[]){
     if (rank == MASTER){
         zonaMultiplicacionTimer = dwalltime() - zonaMultiplicacionTimer;
     // ===================== FIN SEGUNDA ZONA =============================
-    
-        zonaReduceTimer = dwalltime();
     }
      // ===================== TERCERA ZONA =============================
+    
+    if (rank == MASTER) {
+        zonaReduceTimer = dwalltime();
+    }
     MPI_Reduce(&localMaxA, &maxA, 1, MPI_DOUBLE, MPI_MAX, MASTER, MPI_COMM_WORLD);
     MPI_Reduce(&localMinA, &minA, 1, MPI_DOUBLE, MPI_MIN, MASTER, MPI_COMM_WORLD);
     MPI_Reduce(&localSumaA, &sumaA, 1, MPI_DOUBLE, MPI_SUM, MASTER, MPI_COMM_WORLD);
     MPI_Reduce(&localMaxB, &maxB, 1, MPI_DOUBLE, MPI_MAX, MASTER, MPI_COMM_WORLD);
     MPI_Reduce(&localMinB, &minB, 1, MPI_DOUBLE, MPI_MIN, MASTER, MPI_COMM_WORLD);
     MPI_Reduce(&localSumaB, &sumaB, 1, MPI_DOUBLE, MPI_SUM, MASTER, MPI_COMM_WORLD);
+    if (rank == MASTER) {
+        int tiempoReduce = dwalltime() - zonaReduceTimer;
+        printf("El tiempo de la zona de reducciones fue de %d segundos\n", tiempoReduce);
+    }
     
     double promedioA, promedioB, escalar;
 
