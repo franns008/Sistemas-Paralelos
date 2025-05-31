@@ -95,9 +95,7 @@ int main(int argc, char *argv[]){
     
     MPI_Comm_size(MPI_COMM_WORLD, &numProcs);
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-    if (rank == MASTER) {
-        printf("Numero de procesos: %d y tamaño de la matriz %i \n", numProcs, n);
-    }
+    
     int stripSize = n / numProcs;
 
     if (stripSize < blockSize){
@@ -106,7 +104,9 @@ int main(int argc, char *argv[]){
             printf("Se cambia el tamaño del bloque a %d para un mejor aprovechamiento de los procesos\n", blockSize);
         }
     }
-
+    if (rank == MASTER) {
+        printf("Numero de procesos: %d y tamaño de la matriz %i y blockSize %i \n", numProcs, n,blockSize);
+    }
     if (rank == MASTER) {
         A = (double *)malloc(sizeof(double) * n * n);
         B = (double *)malloc(sizeof(double) * n * n);
