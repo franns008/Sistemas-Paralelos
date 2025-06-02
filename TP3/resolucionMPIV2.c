@@ -153,8 +153,7 @@ int main(int argc, char *argv[]){
     }
 
     calcularMatrizTranspuesta(B, BtransLoc, n, stripSize, rank);
-    MPI_Gather(BtransLoc, n * stripSize, MPI_DOUBLE, BtransTot, n * stripSize, MPI_DOUBLE, MASTER, MPI_COMM_WORLD);
-    MPI_Bcast(BtransTot, n * n, MPI_DOUBLE, MASTER, MPI_COMM_WORLD);
+    MPI_Allgather(BtransLoc, n * stripSize, MPI_DOUBLE, BtransTot, n * stripSize, MPI_DOUBLE, MPI_COMM_WORLD);
 
     calcularMaximoMinimoPromedio(A, n, stripSize, &localMax[0], &localMin[0], &localSuma[0]);
     calcularMaximoMinimoPromedio(B, n, stripSize, &localMax[1], &localMin[1], &localSuma[1]);
@@ -199,7 +198,7 @@ int main(int argc, char *argv[]){
 
     MPI_Gather(res1, n * stripSize, MPI_DOUBLE, R, n * stripSize, MPI_DOUBLE, MASTER, MPI_COMM_WORLD);
 
-    if (rank == MASTER) {
+    if (rank == MASTER) { 
         totalTime = dwalltime() - timetick;
         printf("El tiempo total es: %f\n", totalTime);
         printf("El tiempo de la zona de la barrera fue de %f\n",zonaBarreraTimer);

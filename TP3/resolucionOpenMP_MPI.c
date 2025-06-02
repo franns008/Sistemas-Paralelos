@@ -187,10 +187,7 @@ int main(int argc, char *argv[]){
 
         #pragma omp single
         {
-            // Obtener B transpuesta de todos los nodos
-            MPI_Gather(BtransLoc, bufferSizeStrip, MPI_DOUBLE, BtransTot, bufferSizeStrip, MPI_DOUBLE, MASTER, MPI_COMM_WORLD);
-            // Darles a todos el nuevo BT
-            MPI_Bcast(BtransTot, n * n, MPI_DOUBLE, MASTER, MPI_COMM_WORLD);
+            MPI_Allgather(BtransLoc, n * stripSize, MPI_DOUBLE, BtransTot, n * stripSize, MPI_DOUBLE, MPI_COMM_WORLD);
             // Reducción a un valor del máximo, mínimo y sumas locales de A y B
             MPI_Reduce(&localMax, &max, 2, MPI_DOUBLE, MPI_MAX, MASTER, MPI_COMM_WORLD);
             MPI_Reduce(&localMin, &min, 2, MPI_DOUBLE, MPI_MIN, MASTER, MPI_COMM_WORLD);
