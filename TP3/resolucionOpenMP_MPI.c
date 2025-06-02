@@ -117,6 +117,11 @@ int main(int argc, char *argv[]){
 
         blockSize = stripSize;
     }
+    if (rank == MASTER) {
+        printf("El tamaño de la matriz es: %i x %i\n", n, n);
+        printf("El número de procesos es: %i\n", numProcs);
+        printf("El tamaño del bloque es: %i\n", blockSize);
+    }
     // ====================================FIN-VALIDACIONES===================================
     int size = n * n;
     int bufferSizeStrip = n * stripSize;
