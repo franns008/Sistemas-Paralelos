@@ -73,53 +73,47 @@ int main(int argc, char *argv[]){
     MPI_Init(&argc, &argv);
     int i, j, n, rank, numProcs;
     double *A, *B, *C, *BtransLoc,*BtransTot, *res1, *res2, *R;
-    double maxA, maxB, minA, minB, sumaA, sumaB;
-    double localMaxA = -1.0, localMinA = 9999999.0, localSumaA = 0.0;
-    double localMaxB = -1.0, localMinB = 9999999.0, localSumaB = 0.0;
-    double promedioA, promedioB, escalar;
+    double max[2], min[2], suma[2];
+    double localMax[2] , localMin[2], localSuma[2];
     double timetick, totalTime;
+    double escalar;
     int blockSize = 128;
-
     MPI_Comm_size(MPI_COMM_WORLD, &numProcs);
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     // ====================================VALIDACIONES===================================
-    if(rank == MASTER){
-        if(argc != 3){
-            printf("Uso: %s <N> <numero de threads>\n", argv[0]);
-            MPI_Finalize();
-            return 1;
-        }
-        n = atoi(argv[1]);
-        if (n <= 0){
+    if(argc != 3){
+        printf("Uso: %s <N> <numero de threads>\n", argv[0]);
+        MPI_Finalize();
+        return 1;
+    }
+    n = atoi(argv[1]);
+    if (n <= 0){
+        if (rank == MASTER) {
             printf("El valor de N debe ser mayor a 0. Se ingresó =>%i<=\n", n);
-            MPI_Finalize();
-            return 1;    
         }
-        int numThreads = atoi(argv[2]);
-        if (numThreads <= 0){
+        MPI_Finalize();
+        return 1;    
+    }
+    int numThreads = atoi(argv[2]);
+    if (numThreads <= 0){
+        if (rank == MASTER) {
             printf("El valor de numThreads debe ser mayor a 0. Se ingresó =>%i<=\n", numThreads);
-            MPI_Finalize();
-            return 1;    
         }
-   
-
-        if (n % blockSize != 0) {
-            printf("El tamaño de la matriz (n x n) debe ser divisible por el tamaño del bloque\n");
-            MPI_Finalize();
-            return 2;
-        }
+        MPI_Finalize();
+        return 1;    
     }
     int stripSize = n / numProcs;
-    if (stripSize / numThreads < blockSize){
+    if ((stripSize / numThreads) < blockSize){
         if (rank == MASTER){
-            printf("Cambiaremos el blocksize al valor %i para una ejecución balanceada \n", stripSize);
+            printf("Cambiaremos el blocksize al valor %i para una ejecución balanceada \n", (stripSize / numThreads));
         }
 
-        blockSize = stripSize;
+        blockSize = (stripSize/ numThreads);
     }
     if (rank == MASTER) {
         printf("El tamaño de la matriz es: %i x %i\n", n, n);
         printf("El número de procesos es: %i\n", numProcs);
+        printf("El número de threads es: %i\n", numThreads);
         printf("El tamaño del bloque es: %i\n", blockSize);
     }
     // ====================================FIN-VALIDACIONES===================================
@@ -165,26 +159,29 @@ int main(int argc, char *argv[]){
     #pragma omp parallel num_threads(numThreads) shared(A, B, C, BtransTot, res1, res2, escalar)
     {
         calcularMatrizTranspuesta(B, BtransLoc, n, stripSize, rank);
+        localMax[0] = localMax[1] = -1;
+        localMin[0] = localMin[1] = 9999999;
+        localSuma[0] = localSuma[1] = 0.0;
 
-        #pragma omp for reduction(max:localMaxA) reduction(min:localMinA) reduction(+:localSumaA)
+        #pragma omp for reduction(max:localMax[0]) reduction(min:localMin[0]) reduction(+:localSuma[0])
         for (int i = 0; i < stripSize; i++) {
             int offsetI = i * n;
             for (int j = 0; j < n; j++) {
                 double val = A[offsetI + j];
-                if (val > localMaxA) localMaxA = val;
-                if (val < localMinA) localMinA = val;
-                localSumaA += val;
+                if (val > localMax[0]) localMax[0] = val;
+                if (val < localMin[0]) localMin[0] = val;
+                localSuma[0] += val;
             }
         }
 
-        #pragma omp for reduction(max:localMaxB) reduction(min:localMinB) reduction(+:localSumaB)
+        #pragma omp for reduction(max:localMax[1]) reduction(min:localMin[1]) reduction(+:localSuma[1])
         for (int i = 0; i < stripSize; i++) {
             int offsetI = i * n;
             for (int j = 0; j < n; j++) {
                 double val = B[offsetI + j];
-                if (val > localMaxB) localMaxB = val;
-                if (val < localMinB) localMinB = val;
-                localSumaB += val;
+                if (val > localMax[1]) localMax[1] = val;
+                if (val < localMin[1]) localMin[1] = val;
+                localSuma[1] += val;
             }
         }
 
@@ -195,18 +192,17 @@ int main(int argc, char *argv[]){
             // Darles a todos el nuevo BT
             MPI_Bcast(BtransTot, n * n, MPI_DOUBLE, MASTER, MPI_COMM_WORLD);
             // Reducción a un valor del máximo, mínimo y sumas locales de A y B
-            MPI_Reduce(&localMaxA, &maxA, 1, MPI_DOUBLE, MPI_MAX, MASTER, MPI_COMM_WORLD);
-            MPI_Reduce(&localMinA, &minA, 1, MPI_DOUBLE, MPI_MIN, MASTER, MPI_COMM_WORLD);
-            MPI_Reduce(&localSumaA, &sumaA, 1, MPI_DOUBLE, MPI_SUM, MASTER, MPI_COMM_WORLD);
-            MPI_Reduce(&localMaxB, &maxB, 1, MPI_DOUBLE, MPI_MAX, MASTER, MPI_COMM_WORLD);
-            MPI_Reduce(&localMinB, &minB, 1, MPI_DOUBLE, MPI_MIN, MASTER, MPI_COMM_WORLD);
-            MPI_Reduce(&localSumaB, &sumaB, 1, MPI_DOUBLE, MPI_SUM, MASTER, MPI_COMM_WORLD);
+            MPI_Reduce(&localMax, &max, 2, MPI_DOUBLE, MPI_MAX, MASTER, MPI_COMM_WORLD);
+            MPI_Reduce(&localMin, &min, 2, MPI_DOUBLE, MPI_MIN, MASTER, MPI_COMM_WORLD);
+            MPI_Reduce(&localSuma, &suma, 2, MPI_DOUBLE, MPI_SUM, MASTER, MPI_COMM_WORLD);
             
             // Con los datos exactos, realizar el calculo del escalar
+            double promedioA, promedioB;
+
             if (rank == MASTER) {
-                promedioA = sumaA / (n * n);
-                promedioB = sumaB / (n * n);
-                escalar = ((maxA * maxB) - (minA * minB)) / (promedioA * promedioB);
+                promedioA = suma[0] / (n * n);
+                promedioB = suma[1] / (n * n);
+                escalar = ((max[0] * max[1]) - (min[0] * min[1])) / (promedioA * promedioB);
             }
             
             // Informar a todos los procesos del escalar
