@@ -5,14 +5,14 @@
 #include <mpi.h>
 #define MASTER 0
 
-void calcularMaximoMinimoPromedio(double *mat, int n, int stripSize, double *max, double *min, double *promedio){
+void calcularMaximoMinimoPromedio(double *A, int n, int stripSize, double *max, double *min, double *promedio){
     *promedio = 0;
-    *max = -99999;
-    *min = 99999;
+    *max = A[0];
+    *min = A[0];
     for (int i = 0; i < stripSize; i++) {
         int offsetI = i * n;
         for (int j = 0; j < n; j++) {
-            double val = mat[offsetI + j];
+            double val = A[offsetI + j];
             if (val > *max) *max = val;
             if (val < *min) *min = val;
             *promedio += val;
@@ -22,11 +22,9 @@ void calcularMaximoMinimoPromedio(double *mat, int n, int stripSize, double *max
 
 // Cada proceso calcula su porción vertical de la transpuesta
 void calcularMatrizTranspuesta(double *B, double *Btrans, int n, int stripSize, int rank) {
-    int indexRank = rank * stripSize;
     for (int i = 0; i < n; i++) {
-        int indexI = i * stripSize;
         for (int j = 0; j < stripSize; j++) {
-            Btrans[indexI + j] = B[(indexRank + j) * n + i];
+            Btrans[i * stripSize + j] = B[(rank * stripSize + j) * n + i];
         }
     }
 }
@@ -43,14 +41,16 @@ void sumaMatrices(double *A, double *B, double *C, int n, int stripSize){
 }
 
 void multiplacionMatricesBloque(double *A, double *B, double *C, int blockSize, int n, int stripSize){
+    int offsetI, offsetJJ;
+    double aux;
     for (int i = 0; i < stripSize; i += blockSize) {
         for (int j = 0; j < n; j += blockSize) {
             for (int k = 0; k < n; k += blockSize) {
                 for (int ii = i; ii < i + blockSize && ii < stripSize; ii++) {
-                    int offsetI = ii * n;
+                    offsetI = ii * n;
                     for (int jj = j; jj < j + blockSize && jj < n; jj++) {
-                        double aux = 0.0;
-                        int offsetJJ = jj * n;
+                        aux = 0.0;
+                        offsetJJ = jj * n;
                         for (int kk = k; kk < k + blockSize && kk < n; kk++) {
                             aux += A[offsetI + kk] * B[offsetJJ + kk];
                         }
@@ -86,8 +86,8 @@ int main(int argc, char *argv[]){
     double max[2], min[2], suma[2];
     double localMax[2] , localMin[2], localSuma[2];
     MPI_Status status;
-    double timetick, totalTime, zonaReduceTimer, zonaMultiplicacionTimer, zonaBarreraTimer;
-    int blockSize = 64;
+    double timetick[2],totalTime,commTime;
+    int blockSize = 128;
 
     if ((argc != 2) || ((n = atoi(argv[1])) <= 0)) {
         printf("\nUsar: %s size \n  size: Dimension de la matriz y el vector\n", argv[0]);
@@ -142,70 +142,73 @@ int main(int argc, char *argv[]){
         zonaBarreraTimer = dwalltime();
     }
     // ===================== PRIMERA ZONA =============================
-
+    if (rank == MASTER) {
+        timetick[0] = dwalltime();
+    }
     MPI_Scatter(A, n * stripSize, MPI_DOUBLE, A, n * stripSize, MPI_DOUBLE, MASTER, MPI_COMM_WORLD);
     MPI_Scatter(C, n * stripSize, MPI_DOUBLE, C, n * stripSize, MPI_DOUBLE, MASTER, MPI_COMM_WORLD);
     MPI_Bcast(B, n * n, MPI_DOUBLE, MASTER, MPI_COMM_WORLD);
+    if (rank == MASTER) {
+        commTime = dwalltime() - timetick[0];
+    
+    }
 
     MPI_Barrier(MPI_COMM_WORLD);
     zonaBarreraTimer = dwalltime() - zonaBarreraTimer;
      // ===================== FIN PRIMERA ZONA =============================
-
-
-    if (rank == MASTER) {
-        timetick = dwalltime();
-    }
-
-    calcularMatrizTranspuesta(B, BtransLoc, n, stripSize, rank);
-    MPI_Allgather(BtransLoc, n * stripSize, MPI_DOUBLE, BtransTot, n * stripSize, MPI_DOUBLE, MPI_COMM_WORLD);
-
     calcularMaximoMinimoPromedio(A, n, stripSize, &localMax[0], &localMin[0], &localSuma[0]);
     calcularMaximoMinimoPromedio(B, n, stripSize, &localMax[1], &localMin[1], &localSuma[1]);
-     // ===================== SEGUNDA ZONA =============================
-    if (rank == MASTER){
-        zonaMultiplicacionTimer = dwalltime();
-    }
-    multiplacionMatricesBloque(A, B, res1, blockSize, n, stripSize);
-    multiplacionMatricesBloque(C, BtransTot, res2, blockSize, n, stripSize);
-    
-    
-    if (rank == MASTER){
-        zonaMultiplicacionTimer = dwalltime() - zonaMultiplicacionTimer;
-    // ===================== FIN SEGUNDA ZONA =============================
-    }
-     // ===================== TERCERA ZONA =============================
-    
-    if (rank == MASTER) {
-        zonaReduceTimer = dwalltime();
+    calcularMatrizTranspuesta(B, BtransLoc, n, stripSize, rank);
+
+    if(rank == MASTER) {
+        timetick[1] = dwalltime();
     }
     MPI_Reduce(&localMax, &max, 2, MPI_DOUBLE, MPI_MAX, MASTER, MPI_COMM_WORLD);
     MPI_Reduce(&localMin, &min, 2, MPI_DOUBLE, MPI_MIN, MASTER, MPI_COMM_WORLD);
-    MPI_Reduce(&localSuma, &suma, 2, MPI_DOUBLE, MPI_SUM, MASTER, MPI_COMM_WORLD);
+    MPI_Reduce(&localSuma, &suma, 2, MPI_DOUBLE, MPI_SUM, MASTER, MPI_COMM_WORLD); 
+    MPI_Allgather(BtransLoc, n * stripSize, MPI_DOUBLE, BtransTot, n * stripSize, MPI_DOUBLE, MPI_COMM_WORLD);
+    if(rank == MASTER) {
+        commTime += (dwalltime() - timetick[1]);
+    }
+    
+     // ===================== SEGUNDA ZONA =============================
+
+    multiplacionMatricesBloque(A, B, res1, blockSize, n, stripSize);
+    multiplacionMatricesBloque(C, BtransTot, res2, blockSize, n, stripSize);
+    
     
     
     double promedioA, promedioB, escalar;
 
     if (rank == MASTER) {
-        zonaReduceTimer = dwalltime() - zonaReduceTimer;
     // ===================== FIN TERCERA ZONA =============================
         promedioA = suma[0] / (n * n);
         promedioB = suma[1] / (n * n);
         escalar = ((max[0] * max[1]) - (min[0] * min[1])) / (promedioA * promedioB);
     }
-
+    if (rank == MASTER) {
+        timetick[1] = dwalltime();
+    }
     MPI_Bcast(&escalar, 1, MPI_DOUBLE, MASTER, MPI_COMM_WORLD);
+    if (rank == MASTER) {
+        commTime += (dwalltime() - timetick[1]);
+    }
+
     multiplicarMatrizNumero(res1, escalar, stripSize, n);
     sumaMatrices(res1, res2, res1, n, stripSize);
 
+    if (rank == MASTER) {
+        timetick[1] = dwalltime();
+    }
     MPI_Gather(res1, n * stripSize, MPI_DOUBLE, R, n * stripSize, MPI_DOUBLE, MASTER, MPI_COMM_WORLD);
+    if (rank == MASTER) {
+        commTime += (dwalltime() - timetick[1]);
+    }
 
     if (rank == MASTER) { 
         totalTime = dwalltime() - timetick;
         printf("El tiempo total es: %f\n", totalTime);
-        printf("El tiempo de la zona de la barrera fue de %f\n",zonaBarreraTimer);
-        printf("El tiempo de la zona de multiplicaciones de matrices fue %f\n", zonaMultiplicacionTimer);
-        printf("El tiempo de la zona de las reducciones fue de %f\n", zonaReduceTimer);
-
+        printf("El tiempo de comunicacion es: %f\n", commTime);
         for (int i = 0; i < n * n; i++) {
             if (R[i] != n) {
                 printf("Error en el resultado, el valor es: %f en la posicon %i\n", R[i], i);
