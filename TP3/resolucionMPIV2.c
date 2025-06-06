@@ -86,7 +86,8 @@ int main(int argc, char *argv[]){
     double max[2], min[2], suma[2];
     double localMax[2] , localMin[2], localSuma[2];
     MPI_Status status;
-    double timetick[2],totalTime,commTime;
+    double commTime[8], commTimeMax[8], commTimeMin[8];
+
     int blockSize = 128;
 
     if ((argc != 2) || ((n = atoi(argv[1])) <= 0)) {
@@ -139,37 +140,27 @@ int main(int argc, char *argv[]){
                 B[i * n + j] = 1;
             }
         }
-        zonaBarreraTimer = dwalltime();
     }
     // ===================== PRIMERA ZONA =============================
-    if (rank == MASTER) {
-        timetick[0] = dwalltime();
-    }
+    commTime[0] = MPI_Wtime();
     MPI_Scatter(A, n * stripSize, MPI_DOUBLE, A, n * stripSize, MPI_DOUBLE, MASTER, MPI_COMM_WORLD);
     MPI_Scatter(C, n * stripSize, MPI_DOUBLE, C, n * stripSize, MPI_DOUBLE, MASTER, MPI_COMM_WORLD);
     MPI_Bcast(B, n * n, MPI_DOUBLE, MASTER, MPI_COMM_WORLD);
-    if (rank == MASTER) {
-        commTime = dwalltime() - timetick[0];
-    
-    }
-
     MPI_Barrier(MPI_COMM_WORLD);
-    zonaBarreraTimer = dwalltime() - zonaBarreraTimer;
+    commTime[1] = MPI_Wtime();
+
      // ===================== FIN PRIMERA ZONA =============================
     calcularMaximoMinimoPromedio(A, n, stripSize, &localMax[0], &localMin[0], &localSuma[0]);
     calcularMaximoMinimoPromedio(B, n, stripSize, &localMax[1], &localMin[1], &localSuma[1]);
     calcularMatrizTranspuesta(B, BtransLoc, n, stripSize, rank);
 
-    if(rank == MASTER) {
-        timetick[1] = dwalltime();
-    }
+    
+    commTime[2] = MPI_Wtime();
     MPI_Reduce(&localMax, &max, 2, MPI_DOUBLE, MPI_MAX, MASTER, MPI_COMM_WORLD);
     MPI_Reduce(&localMin, &min, 2, MPI_DOUBLE, MPI_MIN, MASTER, MPI_COMM_WORLD);
     MPI_Reduce(&localSuma, &suma, 2, MPI_DOUBLE, MPI_SUM, MASTER, MPI_COMM_WORLD); 
     MPI_Allgather(BtransLoc, n * stripSize, MPI_DOUBLE, BtransTot, n * stripSize, MPI_DOUBLE, MPI_COMM_WORLD);
-    if(rank == MASTER) {
-        commTime += (dwalltime() - timetick[1]);
-    }
+    commTime[3] = MPI_Wtime();
     
      // ===================== SEGUNDA ZONA =============================
 
@@ -186,9 +177,8 @@ int main(int argc, char *argv[]){
         promedioB = suma[1] / (n * n);
         escalar = ((max[0] * max[1]) - (min[0] * min[1])) / (promedioA * promedioB);
     }
-    if (rank == MASTER) {
-        timetick[1] = dwalltime();
-    }
+
+    commTime[4] = MPI_Wtime();
     MPI_Bcast(&escalar, 1, MPI_DOUBLE, MASTER, MPI_COMM_WORLD);
     if (rank == MASTER) {
         commTime += (dwalltime() - timetick[1]);
@@ -200,7 +190,9 @@ int main(int argc, char *argv[]){
     if (rank == MASTER) {
         timetick[1] = dwalltime();
     }
+
     MPI_Gather(res1, n * stripSize, MPI_DOUBLE, R, n * stripSize, MPI_DOUBLE, MASTER, MPI_COMM_WORLD);
+    
     if (rank == MASTER) {
         commTime += (dwalltime() - timetick[1]);
     }

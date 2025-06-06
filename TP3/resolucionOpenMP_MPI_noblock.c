@@ -70,15 +70,15 @@ double dwalltime(){
 }
 
 int main(int argc, char *argv[]){
+    MPI_Init_thread(&argc, &argv, MPI_THREAD_SERIALIZED, NULL);
 
-    MPI_Init_thread(&argc, &argv, MPI_THREAD_MULTIPLE, NULL);
     int i, j, n, rank, numProcs;
     double *A, *B, *C, *BtransLoc,*BtransTot, *res1, *res2, *R;
     double max[2], min[2], suma[2];
     double localMax[2] , localMin[2], localSuma[2];
-    double commTimeMax[8];
-    double commTimeMin[8];
-    double commTime[8];
+    double timetick[2];
+    double totalTime;
+    double commTime;
     double escalar;
     int blockSize = 128;
     MPI_Comm_size(MPI_COMM_WORLD, &numProcs);
@@ -150,20 +150,26 @@ int main(int argc, char *argv[]){
             }
         }
     }
-    MPI_Barrier(MPI_COMM_WORLD);
-    
-    commTime[0] = MPI_Wtime();
-
+    if (rank == MASTER){
+        timetick[0] = dwalltime();
+        commTime = dwalltime();
+    } 
     // Esto no cuenta como parte del tiempo? <===========================================================================================================================
     MPI_Scatter(A, bufferSizeStrip, MPI_DOUBLE, A, bufferSizeStrip, MPI_DOUBLE, MASTER, MPI_COMM_WORLD);
     MPI_Scatter(C, bufferSizeStrip, MPI_DOUBLE, C, bufferSizeStrip, MPI_DOUBLE, MASTER, MPI_COMM_WORLD);
     MPI_Bcast(B, size, MPI_DOUBLE, MASTER, MPI_COMM_WORLD);
-    commTime[1] = MPI_Wtime();
+
+    if(rank == MASTER) {
+        commTime = dwalltime() - commTime;
+    }
+    MPI_Barrier(MPI_COMM_WORLD);
     
 
     #pragma omp parallel num_threads(numThreads) shared(A, B, C, BtransTot, res1, res2, escalar)
     {
+        
         calcularMatrizTranspuesta(B, BtransLoc, n, stripSize, rank);
+        MPI_iAllgather(BtransLoc, n * stripSize, MPI_DOUBLE, BtransTot, n * stripSize, MPI_DOUBLE, MPI_COMM_WORLD, MPI_REQUEST_NULL);   
         localMax[0] = localMax[1] = -1;
         localMin[0] = localMin[1] = 9999999;
         localSuma[0] = localSuma[1] = 0.0;
@@ -192,15 +198,17 @@ int main(int argc, char *argv[]){
 
         #pragma omp single
         {
-            commTime[2] = MPI_Wtime();
-            MPI_Allgather(BtransLoc, n * stripSize, MPI_DOUBLE, BtransTot, n * stripSize, MPI_DOUBLE, MPI_COMM_WORLD);
-            // Reducción a un valor del máximo, mínimo y sumas locales de A y B
+            if(rank == MASTER) {
+                timetick[1] = dwalltime();
+            }
+
             MPI_Reduce(&localMax, &max, 2, MPI_DOUBLE, MPI_MAX, MASTER, MPI_COMM_WORLD);
             MPI_Reduce(&localMin, &min, 2, MPI_DOUBLE, MPI_MIN, MASTER, MPI_COMM_WORLD);
             MPI_Reduce(&localSuma, &suma, 2, MPI_DOUBLE, MPI_SUM, MASTER, MPI_COMM_WORLD);
-            commTime[3] = MPI_Wtime();
 
-
+            if(rank == MASTER) {
+                commTime += (dwalltime() - timetick[1]);
+            }
             // Con los datos exactos, realizar el calculo del escalar
             double promedioA, promedioB;
 
@@ -211,9 +219,13 @@ int main(int argc, char *argv[]){
             }
             
             // Informar a todos los procesos del escalar
-            commTime[4] = MPI_Wtime();
+            if (rank == MASTER) {
+                timetick[1] = dwalltime();
+            }
             MPI_Bcast(&escalar, 1, MPI_DOUBLE, MASTER, MPI_COMM_WORLD);
-            commTime[5] = MPI_Wtime();
+            if (rank == MASTER) {
+                commTime += (dwalltime() - timetick[1]);
+            }
         }
 
         multiplacionMatricesBloque(A, B, res1, blockSize, n, stripSize);
@@ -225,17 +237,19 @@ int main(int argc, char *argv[]){
 
     
     // Obtener el resultado final a partir de lo parcial de todos los nodos
-    commTime[6] = MPI_Wtime();
-    MPI_Gather(res1, bufferSizeStrip, MPI_DOUBLE, R, bufferSizeStrip, MPI_DOUBLE, MASTER, MPI_COMM_WORLD);
-    commTime[7] = MPI_Wtime();
-
-    MPI_Reduce(commTime, commTimeMax, 8, MPI_DOUBLE, MPI_MAX, MASTER, MPI_COMM_WORLD);
-    MPI_Reduce(commTime, commTimeMin, 8, MPI_DOUBLE, MPI_MIN, MASTER, MPI_COMM_WORLD);
-
     if (rank == MASTER) {
-        printf("El tiempo total es: %f\n", commTimeMax[7] - commTimeMin[0]);
-        printf("El tiempo de comunicacion es: %f\n", (commTimeMax[1] - commTimeMin[0]) + (commTimeMax[7] - commTimeMin[6])+
-            (commTimeMax[3] - commTimeMin[2]) + (commTimeMax[5] - commTimeMin[4]));
+        timetick[1] = dwalltime();
+    }
+
+    MPI_Gather(res1, bufferSizeStrip, MPI_DOUBLE, R, bufferSizeStrip, MPI_DOUBLE, MASTER, MPI_COMM_WORLD);
+    if (rank == MASTER) {
+        commTime += (dwalltime() - timetick[1]);
+    }
+    
+    if (rank == MASTER) {
+        totalTime = dwalltime() - timetick;
+        printf("El tiempo total es: %f\n", totalTime);
+        printf("El tiempo de comunicación es: %f\n", commTime);
 
         for (int i = 0; i < n * n; i++) {
             if (R[i] != n) {
