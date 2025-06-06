@@ -83,13 +83,17 @@ int main(int argc, char *argv[]){
     int blockSize = 128;
     MPI_Comm_size(MPI_COMM_WORLD, &numProcs);
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    
     // ====================================VALIDACIONES===================================
+    
     if(argc != 3){
         printf("Uso: %s <N> <numero de threads>\n", argv[0]);
         MPI_Finalize();
         return 1;
     }
+    
     n = atoi(argv[1]);
+    
     if (n <= 0){
         if (rank == MASTER) {
             printf("El valor de N debe ser mayor a 0. Se ingresó =>%i<=\n", n);
@@ -110,18 +114,21 @@ int main(int argc, char *argv[]){
         if (rank == MASTER){
             printf("Cambiaremos el blocksize al valor %i para una ejecución balanceada \n", (stripSize / numThreads));
         }
-
         blockSize = (stripSize/ numThreads);
     }
+    
     if (rank == MASTER) {
         printf("El tamaño de la matriz es: %i x %i\n", n, n);
         printf("El número de procesos es: %i\n", numProcs);
         printf("El número de threads es: %i\n", numThreads);
         printf("El tamaño del bloque es: %i\n", blockSize);
     }
+    
     // ====================================FIN-VALIDACIONES===================================
+    
     int size = n * n;
     int bufferSizeStrip = n * stripSize;
+    
     if (rank == MASTER) {
         A = malloc(sizeof(double) * size);
         B = malloc(sizeof(double) * size);
