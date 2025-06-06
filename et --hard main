@@ -1,0 +1,77 @@
+[1mdiff --cc TP3/resolucionMPIV2.c[m
+[1mindex e970970,19db7e9..0000000[m
+[1m--- a/TP3/resolucionMPIV2.c[m
+[1m+++ b/TP3/resolucionMPIV2.c[m
+[36m@@@ -86,8 -86,8 +88,13 @@@[m [mint main(int argc, char *argv[])[m
+      double max[2], min[2], suma[2];[m
+      double localMax[2] , localMin[2], localSuma[2];[m
+      MPI_Status status;[m
+[32m++<<<<<<< HEAD[m
+[32m +    double timetick, totalTime, zonaReduceTimer, zonaMultiplicacionTimer, zonaBarreraTimer;[m
+[32m +    int blockSize = 64;[m
+[32m++=======[m
+[32m+     double timetick[2],totalTime,commTime;[m
+[32m+     int blockSize = 128;[m
+[32m++>>>>>>> main[m
+  [m
+      if ((argc != 2) || ((n = atoi(argv[1])) <= 0)) {[m
+          printf("\nUsar: %s size \n  size: Dimension de la matriz y el vector\n", argv[0]);[m
+[36m@@@ -150,38 -156,27 +163,55 @@@[m
+      MPI_Barrier(MPI_COMM_WORLD);[m
+      zonaBarreraTimer = dwalltime() - zonaBarreraTimer;[m
+       // ===================== FIN PRIMERA ZONA =============================[m
+[32m++<<<<<<< HEAD[m
+[32m +[m
+[32m +[m
+[32m +    if (rank == MASTER) {[m
+[32m +        timetick = dwalltime();[m
+[32m +    }[m
+[32m +[m
+[32m +    calcularMatrizTranspuesta(B, BtransLoc, n, stripSize, rank);[m
+[32m +    MPI_Allgather(BtransLoc, n * stripSize, MPI_DOUBLE, BtransTot, n * stripSize, MPI_DOUBLE, MPI_COMM_WORLD);[m
+[32m +[m
+[32m++=======[m
+[32m++>>>>>>> main[m
+      calcularMaximoMinimoPromedio(A, n, stripSize, &localMax[0], &localMin[0], &localSuma[0]);[m
+      calcularMaximoMinimoPromedio(B, n, stripSize, &localMax[1], &localMin[1], &localSuma[1]);[m
+[31m-      // ===================== SEGUNDA ZONA =============================[m
+[31m-     if (rank == MASTER){[m
+[31m-         zonaMultiplicacionTimer = dwalltime();[m
+[32m+     calcularMatrizTranspuesta(B, BtransLoc, n, stripSize, rank);[m
+[32m+ [m
+[32m+     if(rank == MASTER) {[m
+[32m+         timetick[1] = dwalltime();[m
+[32m+     }[m
+[32m+     MPI_Reduce(&localMax, &max, 2, MPI_DOUBLE, MPI_MAX, MASTER, MPI_COMM_WORLD);[m
+[32m+     MPI_Reduce(&localMin, &min, 2, MPI_DOUBLE, MPI_MIN, MASTER, MPI_COMM_WORLD);[m
+[32m+     MPI_Reduce(&localSuma, &suma, 2, MPI_DOUBLE, MPI_SUM, MASTER, MPI_COMM_WORLD); [m
+[32m+     MPI_Allgather(BtransLoc, n * stripSize, MPI_DOUBLE, BtransTot, n * stripSize, MPI_DOUBLE, MPI_COMM_WORLD);[m
+[32m+     if(rank == MASTER) {[m
+[32m+         commTime += (dwalltime() - timetick[1]);[m
+      }[m
+[32m+     [m
+[32m+      // ===================== SEGUNDA ZONA =============================[m
+[32m+ [m
+      multiplacionMatricesBloque(A, B, res1, blockSize, n, stripSize);[m
+      multiplacionMatricesBloque(C, BtransTot, res2, blockSize, n, stripSize);[m
+      [m
+      [m
+[32m++<<<<<<< HEAD[m
+[32m +    if (rank == MASTER){[m
+[32m +        zonaMultiplicacionTimer = dwalltime() - zonaMultiplicacionTimer;[m
+[32m +    // ===================== FIN SEGUNDA ZONA =============================[m
+[32m +    }[m
+[32m +     // ===================== TERCERA ZONA =============================[m
+[32m +    [m
+[32m +    if (rank == MASTER) {[m
+[32m +        zonaReduceTimer = dwalltime();[m
+[32m +    }[m
+[32m +    MPI_Reduce(&localMax, &max, 2, MPI_DOUBLE, MPI_MAX, MASTER, MPI_COMM_WORLD);[m
+[32m +    MPI_Reduce(&localMin, &min, 2, MPI_DOUBLE, MPI_MIN, MASTER, MPI_COMM_WORLD);[m
+[32m +    MPI_Reduce(&localSuma, &suma, 2, MPI_DOUBLE, MPI_SUM, MASTER, MPI_COMM_WORLD);[m
+[32m +    [m
+[32m++=======[m
+[32m++>>>>>>> main[m
+      [m
+      double promedioA, promedioB, escalar;[m
+  [m
