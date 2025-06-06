@@ -141,12 +141,16 @@ int main(int argc, char *argv[]){
             }
         }
     }
+    MPI_Barrier(MPI_COMM_WORLD);
+    if (rank == MASTER) {
+        double tiempoEjecucion = dwalltime();
+    }
     // ===================== PRIMERA ZONA =============================
     commTime[0] = MPI_Wtime();
     MPI_Scatter(A, n * stripSize, MPI_DOUBLE, A, n * stripSize, MPI_DOUBLE, MASTER, MPI_COMM_WORLD);
     MPI_Scatter(C, n * stripSize, MPI_DOUBLE, C, n * stripSize, MPI_DOUBLE, MASTER, MPI_COMM_WORLD);
     MPI_Bcast(B, n * n, MPI_DOUBLE, MASTER, MPI_COMM_WORLD);
-    MPI_Barrier(MPI_COMM_WORLD);
+    
     commTime[1] = MPI_Wtime();
 
      // ===================== FIN PRIMERA ZONA =============================
@@ -180,27 +184,28 @@ int main(int argc, char *argv[]){
 
     commTime[4] = MPI_Wtime();
     MPI_Bcast(&escalar, 1, MPI_DOUBLE, MASTER, MPI_COMM_WORLD);
-    if (rank == MASTER) {
-        commTime += (dwalltime() - timetick[1]);
-    }
+    commTime[5] = MPI_Wtime();
 
     multiplicarMatrizNumero(res1, escalar, stripSize, n);
     sumaMatrices(res1, res2, res1, n, stripSize);
 
-    if (rank == MASTER) {
-        timetick[1] = dwalltime();
-    }
-
-    MPI_Gather(res1, n * stripSize, MPI_DOUBLE, R, n * stripSize, MPI_DOUBLE, MASTER, MPI_COMM_WORLD);
     
+    commTime[6] = MPI_Wtime();
+    MPI_Gather(res1, n * stripSize, MPI_DOUBLE, R, n * stripSize, MPI_DOUBLE, MASTER, MPI_COMM_WORLD);
+    commTime[7] = MPI_Wtime();
     if (rank == MASTER) {
-        commTime += (dwalltime() - timetick[1]);
+        tiempoEjecucion = tiempoEjecucion-dwalltime();
     }
+    double avgTime = (commTime[1] - commTime[0]) + (commTime[3] - commTime[2]) + (commTime[5] - commTime[4]) + (commTime[7] - commTime[6]);
+    double totalTime = 0.0;
+    printf("El tiempo de comunicacion del proceso %d es: %f\n", rank, avgTime);
+
+    MPI_Reduce(&avgTime, &totalTime, 1, MPI_DOUBLE, MPI_SUM, MASTER, MPI_COMM_WORLD);
 
     if (rank == MASTER) { 
         totalTime = dwalltime() - timetick;
         printf("El tiempo total es: %f\n", totalTime);
-        printf("El tiempo de comunicacion es: %f\n", commTime);
+        printf("El tiempo promedio de comunicacion es: %f\n", totalTime / numProcs);
         for (int i = 0; i < n * n; i++) {
             if (R[i] != n) {
                 printf("Error en el resultado, el valor es: %f en la posicon %i\n", R[i], i);

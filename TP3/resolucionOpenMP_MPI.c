@@ -151,7 +151,10 @@ int main(int argc, char *argv[]){
         }
     }
     MPI_Barrier(MPI_COMM_WORLD);
-    
+    double tiempoEjecucion;
+    if (rank == MASTER) {
+        tiempoEjecucion = dwalltime();
+    }
     commTime[0] = MPI_Wtime();
 
     // Esto no cuenta como parte del tiempo? <===========================================================================================================================
@@ -228,15 +231,20 @@ int main(int argc, char *argv[]){
     commTime[6] = MPI_Wtime();
     MPI_Gather(res1, bufferSizeStrip, MPI_DOUBLE, R, bufferSizeStrip, MPI_DOUBLE, MASTER, MPI_COMM_WORLD);
     commTime[7] = MPI_Wtime();
+    if(rank == MASTER) {
+        tiempoEjecucion = dwalltime() - tiempoEjecucion;
+    }    
 
-    MPI_Reduce(commTime, commTimeMax, 8, MPI_DOUBLE, MPI_MAX, MASTER, MPI_COMM_WORLD);
-    MPI_Reduce(commTime, commTimeMin, 8, MPI_DOUBLE, MPI_MIN, MASTER, MPI_COMM_WORLD);
-
+    double avgTime = (commTime[1] - commTime[0]) + (commTime[7] - commTime[6]) +
+                     (commTime[3] - commTime[2]) + (commTime[5] - commTime[4]);
+    printf("Tiempo de comunicación del proceso %d: %f\n", rank, avgTime);
+    double avgTimeTot = 0.0;
+    MPI_Reduce(&avgTime, &avgTimeTot, 1, MPI_DOUBLE, MPI_SUM, MASTER, MPI_COMM_WORLD);
+    
     if (rank == MASTER) {
-        printf("El tiempo total es: %f\n", commTimeMax[7] - commTimeMin[0]);
-        printf("El tiempo de comunicacion es: %f\n", (commTimeMax[1] - commTimeMin[0]) + (commTimeMax[7] - commTimeMin[6])+
-            (commTimeMax[3] - commTimeMin[2]) + (commTimeMax[5] - commTimeMin[4]));
-
+        avgTimeTot /= numProcs;
+        printf("El tiempo total es: %f\n", tiempoEjecucion);
+        printf("El tiempo promedio de comunicacion es: %f\n", avgTimeTot);
         for (int i = 0; i < n * n; i++) {
             if (R[i] != n) {
                 printf("Error en el resultado, el valor es: %f en la posicion %i\n", R[i], i);
@@ -244,7 +252,7 @@ int main(int argc, char *argv[]){
                 break;
             }
         }
-        printf("El resultado es correcto, con N= %i y numero de procesos = %i \n",n, numProcs);
+        printf("El resultado es correcto, con N= %i y numero de procesos = %i \n", n, numProcs);
     }
 
     free(A); free(B); free(C); free(BtransLoc); free(BtransTot); free(res1); free(res2); free(R);
