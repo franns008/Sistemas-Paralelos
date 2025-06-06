@@ -142,8 +142,9 @@ int main(int argc, char *argv[]){
         }
     }
     MPI_Barrier(MPI_COMM_WORLD);
+    double tiempoEjecucion;
     if (rank == MASTER) {
-        double tiempoEjecucion = dwalltime();
+        tiempoEjecucion = dwalltime();
     }
     // ===================== PRIMERA ZONA =============================
     commTime[0] = MPI_Wtime();
@@ -202,9 +203,8 @@ int main(int argc, char *argv[]){
 
     MPI_Reduce(&avgTime, &totalTime, 1, MPI_DOUBLE, MPI_SUM, MASTER, MPI_COMM_WORLD);
 
-    if (rank == MASTER) { 
-        totalTime = dwalltime() - timetick;
-        printf("El tiempo total es: %f\n", totalTime);
+    if (rank == MASTER) {
+        printf("El tiempo total es: %f\n", tiempoEjecucion);
         printf("El tiempo promedio de comunicacion es: %f\n", totalTime / numProcs);
         for (int i = 0; i < n * n; i++) {
             if (R[i] != n) {
