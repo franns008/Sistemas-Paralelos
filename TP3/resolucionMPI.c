@@ -195,7 +195,7 @@ int main(int argc, char *argv[]){
     MPI_Gather(res1, n * stripSize, MPI_DOUBLE, R, n * stripSize, MPI_DOUBLE, MASTER, MPI_COMM_WORLD);
     commTime[7] = MPI_Wtime();
     if (rank == MASTER) {
-        tiempoEjecucion = dwalltime()- tiempoEjecucion;
+        tiempoEjecucion = tiempoEjecucion-dwalltime();
     }
     double avgTime = (commTime[1] - commTime[0]) + (commTime[3] - commTime[2]) + (commTime[5] - commTime[4]) + (commTime[7] - commTime[6]);
     double totalTime = 0.0;

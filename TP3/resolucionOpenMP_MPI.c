@@ -71,7 +71,8 @@ double dwalltime(){
 
 int main(int argc, char *argv[]){
 
-    MPI_Init_thread(&argc, &argv, MPI_THREAD_MULTIPLE, NULL);
+    int provided;
+    MPI_Init_thread(&argc, &argv, MPI_THREAD_MULTIPLE, &provided);
     int i, j, n, rank, numProcs;
     double *A, *B, *C, *BtransLoc,*BtransTot, *res1, *res2, *R;
     double max[2], min[2], suma[2];
@@ -109,7 +110,9 @@ int main(int argc, char *argv[]){
         MPI_Finalize();
         return 1;    
     }
+    
     int stripSize = n / numProcs;
+   
     if ((stripSize / numThreads) < blockSize){
         if (rank == MASTER){
             printf("Cambiaremos el blocksize al valor %i para una ejecución balanceada \n", (stripSize / numThreads));
@@ -119,7 +122,7 @@ int main(int argc, char *argv[]){
     
     if (rank == MASTER) {
         printf("El tamaño de la matriz es: %i x %i\n", n, n);
-        printf("El número de procesos es: %i\n", numProcs);
+        printf("El número de procesos por hilo es: %i\n", numProcs);
         printf("El número de threads es: %i\n", numThreads);
         printf("El tamaño del bloque es: %i\n", blockSize);
     }
