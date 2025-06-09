@@ -7,8 +7,8 @@
 
 void calcularMaximoMinimoPromedio(double *A, int n, int stripSize, double *max, double *min, double *promedio){
     *promedio = 0;
-    *max = A[0];
-    *min = A[0];
+    *max = -99999;
+    *min = 99999;
     for (int i = 0; i < stripSize; i++) {
         int offsetI = i * n;
         for (int j = 0; j < n; j++) {
@@ -22,9 +22,12 @@ void calcularMaximoMinimoPromedio(double *A, int n, int stripSize, double *max, 
 
 // Cada proceso calcula su porción vertical de la transpuesta
 void calcularMatrizTranspuesta(double *B, double *Btrans, int n, int stripSize, int rank) {
+    int indexRank = rank * stripSize;
+    int indexI;
     for (int i = 0; i < n; i++) {
+        indexI = i * stripSize;
         for (int j = 0; j < stripSize; j++) {
-            Btrans[i * stripSize + j] = B[(rank * stripSize + j) * n + i];
+            Btrans[indexI + j] = B[(indexRank + j) * n + i];
         }
     }
 }
@@ -86,7 +89,8 @@ int main(int argc, char *argv[]){
     double max[2], min[2], suma[2];
     double localMax[2] , localMin[2], localSuma[2];
     MPI_Status status;
-    double timetick[2],totalTime,commTime;
+    double commTime[8], commTimeMax[8], commTimeMin[8];
+
     int blockSize = 128;
 
     if ((argc != 2) || ((n = atoi(argv[1])) <= 0)) {
@@ -96,11 +100,10 @@ int main(int argc, char *argv[]){
     
     MPI_Comm_size(MPI_COMM_WORLD, &numProcs);
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-    
+    MPI_Request requests[9];
     int stripSize = n / numProcs;
     int size = n * n;
     int bufferStripSize = n * stripSize;
-
     if (stripSize < blockSize){
         blockSize = stripSize;
         if (rank == MASTER){
@@ -111,23 +114,23 @@ int main(int argc, char *argv[]){
         printf("Numero de procesos: %d y tamaño de la matriz %i y blockSize %i \n", numProcs, n,blockSize);
     }
     if (rank == MASTER) {
-        A = (double *)malloc(sizeof(double) * n * n);
-        B = (double *)malloc(sizeof(double) * n * n);
-        C = (double *)malloc(sizeof(double) * n * n);
-        BtransLoc = (double *)malloc(sizeof(double) * n * n);
-        BtransTot = (double *)malloc(sizeof(double) * n * n);
-        res1 = (double *)calloc(n * n, sizeof(double));
-        res2 = (double *)calloc(n * n, sizeof(double));
+        A = (double *)malloc(sizeof(double) * size);
+        B = (double *)malloc(sizeof(double) * size);
+        C = (double *)malloc(sizeof(double) * size);
+        BtransLoc = (double *)malloc(sizeof(double) * size);
+        BtransTot = (double *)malloc(sizeof(double) * size);
+        res1 = (double *)calloc(size, sizeof(double));
+        res2 = (double *)calloc(size, sizeof(double));
     } else {
-        A = (double *)malloc(sizeof(double) * n * stripSize);
-        B = (double *)malloc(sizeof(double) * n * n);
-        C = (double *)malloc(sizeof(double) * n * stripSize);
-        BtransLoc = (double *)malloc(sizeof(double) * n * stripSize);
-        BtransTot = (double *)malloc(sizeof(double) * n * n);
-        res1 = (double *)calloc(n * stripSize, sizeof(double));
-        res2 = (double *)calloc(n * stripSize, sizeof(double));
+        A = (double *)malloc(sizeof(double) * bufferStripSize);
+        B = (double *)malloc(sizeof(double) * size);
+        C = (double *)malloc(sizeof(double) * bufferStripSize);
+        BtransLoc = (double *)malloc(sizeof(double) * bufferStripSize);
+        BtransTot = (double *)malloc(sizeof(double) * size);
+        res1 = (double *)calloc(bufferStripSize, sizeof(double));
+        res2 = (double *)calloc(bufferStripSize, sizeof(double));
     }
-    R = (double *)malloc(sizeof(double) * n * n);
+    R = (double *)malloc(sizeof(double) * size);
 
     if (rank == MASTER) {
         for (i = 0; i < n; i++) {
@@ -141,77 +144,90 @@ int main(int argc, char *argv[]){
                 B[i * n + j] = 1;
             }
         }
-        zonaBarreraTimer = dwalltime();
     }
-    // ===================== PRIMERA ZONA =============================
+    MPI_Barrier(MPI_COMM_WORLD);
+    double tiempoEjecucion;
     if (rank == MASTER) {
-        timetick[0] = dwalltime();
-    }
-    MPI_Scatter(A, n * stripSize, MPI_DOUBLE, A, n * stripSize, MPI_DOUBLE, MASTER, MPI_COMM_WORLD);
-    MPI_Scatter(C, n * stripSize, MPI_DOUBLE, C, n * stripSize, MPI_DOUBLE, MASTER, MPI_COMM_WORLD);
-    MPI_Bcast(B, n * n, MPI_DOUBLE, MASTER, MPI_COMM_WORLD);
-    if (rank == MASTER) {
-        commTime = dwalltime() - timetick[0];
-    
+        tiempoEjecucion = dwalltime();
     }
 
-    MPI_Barrier(MPI_COMM_WORLD);
-    zonaBarreraTimer = dwalltime() - zonaBarreraTimer;
-     // ===================== FIN PRIMERA ZONA =============================
+    commTime[0] = MPI_Wtime();
+    MPI_Iscatter(A, bufferStripSize, MPI_DOUBLE, A, bufferStripSize, MPI_DOUBLE, MASTER, MPI_COMM_WORLD, &requests[0]);
+    MPI_Ibcast(B, size, MPI_DOUBLE, MASTER, MPI_COMM_WORLD, &requests[1]);    
+    MPI_Iscatter(C, bufferStripSize, MPI_DOUBLE, C, bufferStripSize, MPI_DOUBLE, MASTER, MPI_COMM_WORLD, &requests[2]); 
+    
+    commTime[1] = MPI_Wtime();
+    
+    MPI_Wait(&requests[0], MPI_STATUS_IGNORE);
+
     calcularMaximoMinimoPromedio(A, n, stripSize, &localMax[0], &localMin[0], &localSuma[0]);
+
+    MPI_Wait(&requests[1], MPI_STATUS_IGNORE);
     calcularMaximoMinimoPromedio(B, n, stripSize, &localMax[1], &localMin[1], &localSuma[1]);
     calcularMatrizTranspuesta(B, BtransLoc, n, stripSize, rank);
 
-    if(rank == MASTER) {
-        timetick[1] = dwalltime();
-    }
-    MPI_Reduce(&localMax, &max, 2, MPI_DOUBLE, MPI_MAX, MASTER, MPI_COMM_WORLD);
-    MPI_Reduce(&localMin, &min, 2, MPI_DOUBLE, MPI_MIN, MASTER, MPI_COMM_WORLD);
-    MPI_Reduce(&localSuma, &suma, 2, MPI_DOUBLE, MPI_SUM, MASTER, MPI_COMM_WORLD); 
-    MPI_Allgather(BtransLoc, n * stripSize, MPI_DOUBLE, BtransTot, n * stripSize, MPI_DOUBLE, MPI_COMM_WORLD);
-    if(rank == MASTER) {
-        commTime += (dwalltime() - timetick[1]);
-    }
+    commTime[2] = MPI_Wtime();
+    // Reducción de MaxA y MaxB    
+    MPI_Ireduce(&localMax, &max, 2, MPI_DOUBLE, MPI_MAX, MASTER, MPI_COMM_WORLD, &requests[3]);
     
-     // ===================== SEGUNDA ZONA =============================
+    // Reducción de MinA y MinB
+    MPI_Ireduce(&localMin, &min, 2, MPI_DOUBLE, MPI_MIN, MASTER, MPI_COMM_WORLD, &requests[4]);
 
+
+    // Reducción de sumaA y suma B
+    MPI_Ireduce(&localSuma, &suma, 2, MPI_DOUBLE, MPI_SUM, MASTER, MPI_COMM_WORLD, &requests[5]);
+
+
+    MPI_Iallgather(BtransLoc, bufferStripSize, MPI_DOUBLE, BtransTot, bufferStripSize, MPI_DOUBLE, MPI_COMM_WORLD, &requests[6]);
+    commTime[3] = MPI_Wtime();
+
+    
     multiplacionMatricesBloque(A, B, res1, blockSize, n, stripSize);
+    
+    MPI_Wait(&requests[2], MPI_STATUS_IGNORE);
+    MPI_Wait(&requests[6], MPI_STATUS_IGNORE);
     multiplacionMatricesBloque(C, BtransTot, res2, blockSize, n, stripSize);
     
-    
-    
     double promedioA, promedioB, escalar;
-
+    MPI_Wait(&requests[3], MPI_STATUS_IGNORE);
+    MPI_Wait(&requests[4], MPI_STATUS_IGNORE);
+    MPI_Wait(&requests[5], MPI_STATUS_IGNORE);
+    
     if (rank == MASTER) {
     // ===================== FIN TERCERA ZONA =============================
-        promedioA = suma[0] / (n * n);
-        promedioB = suma[1] / (n * n);
+        promedioA = suma[0] / size;
+        promedioB = suma[1] / size;
         escalar = ((max[0] * max[1]) - (min[0] * min[1])) / (promedioA * promedioB);
     }
-    if (rank == MASTER) {
-        timetick[1] = dwalltime();
-    }
-    MPI_Bcast(&escalar, 1, MPI_DOUBLE, MASTER, MPI_COMM_WORLD);
-    if (rank == MASTER) {
-        commTime += (dwalltime() - timetick[1]);
-    }
 
+    commTime[4] = MPI_Wtime();
+    MPI_Ibcast(&escalar, 1, MPI_DOUBLE, MASTER, MPI_COMM_WORLD, &requests[7]);
+    commTime[5] = MPI_Wtime();
+    
+    MPI_Wait(&requests[7], MPI_STATUS_IGNORE);
+    
     multiplicarMatrizNumero(res1, escalar, stripSize, n);
     sumaMatrices(res1, res2, res1, n, stripSize);
 
+    
+    commTime[6] = MPI_Wtime();
+    MPI_Igather(res1, bufferStripSize, MPI_DOUBLE, R, bufferStripSize, MPI_DOUBLE, MASTER, MPI_COMM_WORLD, &requests[8]);
+    commTime[7] = MPI_Wtime();
+    MPI_Wait(&requests[8], MPI_STATUS_IGNORE);
     if (rank == MASTER) {
-        timetick[1] = dwalltime();
+        
+        tiempoEjecucion = dwalltime()- tiempoEjecucion; 
     }
-    MPI_Gather(res1, n * stripSize, MPI_DOUBLE, R, n * stripSize, MPI_DOUBLE, MASTER, MPI_COMM_WORLD);
-    if (rank == MASTER) {
-        commTime += (dwalltime() - timetick[1]);
-    }
+    double avgTime = (commTime[1] - commTime[0]) + (commTime[3] - commTime[2]) + (commTime[5] - commTime[4]) + (commTime[7] - commTime[6]);
+    double totalTime = 0.0;
+    printf("El tiempo de comunicacion del proceso %d es: %f\n", rank, avgTime);
 
-    if (rank == MASTER) { 
-        totalTime = dwalltime() - timetick;
-        printf("El tiempo total es: %f\n", totalTime);
-        printf("El tiempo de comunicacion es: %f\n", commTime);
-        for (int i = 0; i < n * n; i++) {
+    MPI_Reduce(&avgTime, &totalTime, 1, MPI_DOUBLE, MPI_SUM, MASTER, MPI_COMM_WORLD);
+
+    if (rank == MASTER) {
+        printf("El tiempo total es: %f\n", tiempoEjecucion);
+        printf("El tiempo promedio de comunicacion es: %f\n", totalTime / numProcs);
+        for (int i = 0; i < size; i++) {
             if (R[i] != n) {
                 printf("Error en el resultado, el valor es: %f en la posicon %i\n", R[i], i);
                 printf("El resultado es incorrecto\n");

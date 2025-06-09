@@ -20,59 +20,6 @@ void calcularMaximoMinimoPromedio(double *A, int n, int stripSize, double *max, 
     }
 }
 
-// Cada proceso calcula su porción vertical de la transpuesta
-void calcularMatrizTranspuesta(double *B, double *Btrans, int n, int stripSize, int rank) {
-    int indexI;
-    int indexRank = rank * stripSize;
-    for (int i = 0; i < n; i++) {
-        indexI = i * stripSize;
-        for (int j = 0; j < stripSize; j++) {
-            Btrans[indexI + j] = B[(indexRank + j) * n + i];
-        }
-    }
-}
-
-
-
-void sumaMatrices(double *A, double *B, double *C, int n, int stripSize){
-    for (int i = 0; i < stripSize; i++) {
-        int offsetI = i * n;
-        for (int j = 0; j < n; j++) {
-            C[offsetI + j] = A[offsetI + j] + B[offsetI + j];
-        }
-    }
-}
-
-void multiplacionMatricesBloque(double *A, double *B, double *C, int blockSize, int n, int stripSize){
-    int offsetI, offsetJJ;
-    double aux;
-    for (int i = 0; i < stripSize; i += blockSize) {
-        for (int j = 0; j < n; j += blockSize) {
-            for (int k = 0; k < n; k += blockSize) {
-                for (int ii = i; ii < i + blockSize && ii < stripSize; ii++) {
-                    offsetI = ii * n;
-                    for (int jj = j; jj < j + blockSize && jj < n; jj++) {
-                        aux = 0.0;
-                        offsetJJ = jj * n;
-                        for (int kk = k; kk < k + blockSize && kk < n; kk++) {
-                            aux += A[offsetI + kk] * B[offsetJJ + kk];
-                        }
-                        C[offsetI + jj] += aux;
-                    }
-                }
-            }
-        }
-    }
-}
-
-void multiplicarMatrizNumero(double *A, double escalar, int stripSize, int n){
-    for (int i = 0; i < stripSize; i++) {
-        int indexI = i * n;
-        for (int j = 0; j < n; j++) {
-            A[indexI + j] *= escalar;
-        }
-    }
-}
 
 double dwalltime(){
     double sec;
@@ -89,7 +36,7 @@ int main(int argc, char *argv[]){
     double max[2], min[2], suma[2];
     double localMax[2] , localMin[2], localSuma[2];
     MPI_Status status;
-    double timetick[2],totalTime,commTime, zonaBarreraTimer;
+    double timetick[2],totalTime,commTime;
     int blockSize = 128;
 
     if ((argc != 2) || ((n = atoi(argv[1])) <= 0)) {
@@ -135,16 +82,16 @@ int main(int argc, char *argv[]){
     if (rank == MASTER) {
         for (i = 0; i < n; i++) {
             for (j = 0; j < n; j++) {
-                A[i * n + j] = 1;
-                C[i * n + j] = 1;
+                A[i * n + j] = i*j;
+                C[i * n + j] = i*j;
             }
         }
         for (i = 0; i < n; i++) {
             for (j = 0; j < n; j++) {
-                B[i * n + j] = 1;
+                B[i * n + j] = 5;
             }
         }
-        zonaBarreraTimer = dwalltime();
+      
     }
     // ===================== PRIMERA ZONA =============================
     if (rank == MASTER) {
@@ -159,11 +106,11 @@ int main(int argc, char *argv[]){
     }
 
     MPI_Barrier(MPI_COMM_WORLD);
-    zonaBarreraTimer = dwalltime() - zonaBarreraTimer;
+
      // ===================== FIN PRIMERA ZONA =============================
     calcularMaximoMinimoPromedio(A, n, stripSize, &localMax[0], &localMin[0], &localSuma[0]);
     calcularMaximoMinimoPromedio(B, n, stripSize, &localMax[1], &localMin[1], &localSuma[1]);
-    calcularMatrizTranspuesta(B, BtransLoc, n, stripSize, rank);
+
 
     if(rank == MASTER) {
         timetick[1] = dwalltime();
@@ -171,57 +118,29 @@ int main(int argc, char *argv[]){
     MPI_Reduce(&localMax, &max, 2, MPI_DOUBLE, MPI_MAX, MASTER, MPI_COMM_WORLD);
     MPI_Reduce(&localMin, &min, 2, MPI_DOUBLE, MPI_MIN, MASTER, MPI_COMM_WORLD);
     MPI_Reduce(&localSuma, &suma, 2, MPI_DOUBLE, MPI_SUM, MASTER, MPI_COMM_WORLD); 
-    MPI_Allgather(BtransLoc, n * stripSize, MPI_DOUBLE, BtransTot, n * stripSize, MPI_DOUBLE, MPI_COMM_WORLD);
+
     if(rank == MASTER) {
         commTime += (dwalltime() - timetick[1]);
     }
     
      // ===================== SEGUNDA ZONA =============================
-
-    multiplacionMatricesBloque(A, B, res1, blockSize, n, stripSize);
-    multiplacionMatricesBloque(C, BtransTot, res2, blockSize, n, stripSize);
-    
     double promedioA, promedioB, escalar;
-
+    
     if (rank == MASTER) {
-    // ===================== FIN TERCERA ZONA =============================
+        printf("El maximo de A es ==> %f \n", max[0]);
+        printf("El maximo de B es ==> %f \n", max[1]);
+        printf("El minimo de A es ==> %f \n", min[0]);
+        printf("El minimo de B es ==> %f \n", min[1]);
+        printf("La suma total de A es ==> %f \n", suma[0]);
+        printf("La suma total de B es ==> %f \n", suma[1]);
         promedioA = suma[0] / (size);
         promedioB = suma[1] / (size);
         escalar = ((max[0] * max[1]) - (min[0] * min[1])) / (promedioA * promedioB);
     }
-    if (rank == MASTER) {
-        timetick[1] = dwalltime();
-    }
-    MPI_Bcast(&escalar, 1, MPI_DOUBLE, MASTER, MPI_COMM_WORLD);
-    if (rank == MASTER) {
-        commTime += (dwalltime() - timetick[1]);
-    }
+   
+    
 
-    multiplicarMatrizNumero(res1, escalar, stripSize, n);
-    sumaMatrices(res1, res2, res1, n, stripSize);
-
-    if (rank == MASTER) {
-        timetick[1] = dwalltime();
-    }
-    MPI_Gather(res1, bufferStripSize, MPI_DOUBLE, R, bufferStripSize, MPI_DOUBLE, MASTER, MPI_COMM_WORLD);
-    if (rank == MASTER) {
-        commTime += (dwalltime() - timetick[1]);
-    }
-
-    if (rank == MASTER) { 
-        totalTime = dwalltime() - timetick[0];
-        printf("El tiempo total es: %f\n", totalTime);
-        printf("El tiempo de comunicacion es: %f\n", commTime);
-        for (int i = 0; i < size; i++) {
-            if (R[i] != n) {
-                printf("Error en el resultado, el valor es: %f en la posicion %i\n", R[i], i);
-                printf("El resultado es incorrecto\n");
-                break;
-            }
-        }
-        printf("El resultado es correcto\n");
-    }
-
+   
    if (rank == MASTER) {
         free(A);
         free(B);
